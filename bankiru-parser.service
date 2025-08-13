@@ -1,0 +1,14 @@
+[Unit]
+Description=bankiru-parser
+After=syslog.target
+After=network.target
+
+[Service]
+Type=simple
+User=evm
+WorkingDirectory=/home/evm/bankiru-parser
+ExecStart=/home/evm/bankiru-parser/.venv/bin/python /home/evm/bankiru-parser/main.py
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
