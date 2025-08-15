@@ -50,10 +50,15 @@ class BankiruReviewsParser:
         page_counter = itertools.count(start_page)
 
         while True:
-            time.sleep(10)  # wait to avoid 403/429 errors
-            args = (BASE_URL, product, next(page_counter))
-            page = self.__class__.send_request(PAGE_URL.format(*args))
-            if page is None: continue
+            for _ in range(MAX_ATTEMPTS):
+                args = (BASE_URL, product, next(page_counter))
+                page = self.__class__.send_request(PAGE_URL.format(*args))
+                if page is not None:
+                    break
+            else:
+                # break the while loop (we are done with the product) if the
+                # page is still None after MAX_ATTEMPTS consecutive requests
+                break
 
             page = " ".join(page.text.replace("\\", "").split())
             match_factory = zip(
@@ -62,7 +67,6 @@ class BankiruReviewsParser:
             )
 
             for content_match, url_match in match_factory:
-                time.sleep(10)
                 record = json.loads("".join(content_match.groups()))
                 descr = f"{product} {record["datePublished"]}"
                 date_published = datetime.datetime.strptime(
@@ -77,7 +81,8 @@ class BankiruReviewsParser:
 
                 review_url = BASE_URL + url_match.group(1)
                 response = self.__class__.send_request(review_url)
-                if response is None: continue
+                if response is None:
+                    continue
 
                 record["reviewBody"] = clean_text_pipe(record["reviewBody"])
                 record["bankName"] = record["itemReviewed"]["name"].strip()
@@ -88,8 +93,10 @@ class BankiruReviewsParser:
                 self.records.append(record)
                 logger.info(f"{descr}: successfully parsed")
             else:
-                continue  # if inner loop didn't break then continue the outer
-            break  # if inner loop was terminated then terminate the outer too
+                # if the inner loop didn't break then continue the outer
+                continue
+            # if the inner loop was terminated then terminate the outer too
+            break
 
         return self
 
@@ -103,12 +110,18 @@ class BankiruReviewsParser:
 
     @staticmethod
     def send_request(url: str) -> requests.Response | None:
-        try:
-            response = requests.get(url, headers=HEADERS)
-            if response.status_code != 200:
-                logger.error(f"{url}: {response.status_code}")
-                return None
-            return response
-        except Exception as exc:
-            logger.error(f"{url}: {exc}", exc_info=False)
-            return None
+        response = None
+
+        for attempt in range(1, MAX_ATTEMPTS + 1):
+            time.sleep(10)  # from Aug-2025 on: wait to avoid 403/429 errors
+            try:
+                response = requests.get(url, headers=HEADERS)
+                if response.status_code != 200:
+                    logger.error(f"{url} {attempt=}: {response.status_code}")
+                    response = None
+            except Exception as exc:
+                logger.error(f"{url} {attempt=}: {exc}", exc_info=False)
+
+            if response is not None:
+                break
+        return response

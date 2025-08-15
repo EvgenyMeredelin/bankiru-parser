@@ -85,3 +85,5 @@ headers_update = {
     "Accept-Language": "ru,en;q=0.9"
 }
 HEADERS.update(headers_update)
+
+MAX_ATTEMPTS: int = 3
